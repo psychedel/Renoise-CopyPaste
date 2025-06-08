@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RenoiseScriptingTool doc_version="0">
+  <Name>Copy Paste Tool</Name>
+  <Id>com.psychedel.CopyPaste</Id>
+  <Version>0.1</Version>
+  <ApiVersion>6</ApiVersion>
+  <Author>Psychedel</Author>
+  <Description>Tool for easy text copy/paste of pattern data between Renoise and external applications</Description>
+  <Category>Pattern Editor</Category>
+  <Homepage>https://github.com/psychedel/Renoise-CopyPaste</Homepage>
+</RenoiseScriptingTool>
