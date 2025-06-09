@@ -1,4 +1,4 @@
-name: Package Paketti as .XRNX
+name: Package Renoise-CopyPaste as .XRNX
 
 on:
   workflow_dispatch:
