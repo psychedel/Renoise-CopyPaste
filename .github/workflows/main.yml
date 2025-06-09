@@ -1,0 +1,71 @@
+name: Package Paketti as .XRNX
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  package-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Checkout the repository (no submodules)
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          submodules: false
+
+      # 2. Fail if any .lua file contains forbidden tokens
+      - name: Check Lua for forbidden tokens
+        run: |
+          if grep -R -n -E 'goto continue|::continue::' --include '*.lua' .; then
+            echo "::error::Forbidden token found in Lua files. Please remove 'goto continue' or '::continue::'."
+            exit 1
+          fi
+
+      # 4. Generate a timestamp-based tag and filename
+      - name: Generate Tag and Filename
+        run: |
+          TIMESTAMP=$(date +'%Y-%m-%d_%H-%M-%S')
+          echo "TAG_NAME=$TIMESTAMP" >> $GITHUB_ENV
+          echo "FILENAME=org.psychedel.Renoise-CopyPaste_${TIMESTAMP}.xrnx" >> $GITHUB_ENV
+
+      # 5. Zip the package using the dynamic filename
+      - name: Zip XRNX Package
+        run: |
+          zip -r "${{ env.FILENAME }}" . \
+            -x "*.git*" "*.github*" \
+
+      # 6. Create and push the Git tag
+      - name: Create and Push Tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
+
+      # 7. Create a GitHub release for that tag
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          release_name: Release ${{ env.TAG_NAME }}
+          draft: false
+          prerelease: false
+
+      # 8. Upload the dynamically named .xrnx asset
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ env.FILENAME }}
+          asset_name: ${{ env.FILENAME }}
+          asset_content_type: application/octet-stream
