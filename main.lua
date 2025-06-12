@@ -9,6 +9,10 @@ local last_selection = nil
 local copy_dialog = nil
 local paste_dialog = nil
 
+function keyhandler_func(dialog, key)
+    return key
+end
+
 -- Utility functions
 local function log(message)
     print("[" .. APP_NAME .. "] " .. tostring(message))
@@ -331,7 +335,7 @@ function show_copy_dialog(text_data)
         }
     }
 
-    copy_dialog = renoise.app():show_custom_dialog("Copy Pattern Data", dialog_content)
+    copy_dialog = renoise.app():show_custom_dialog("Copy Pattern Data", dialog_content, keyhandler_func)
 end
 
 function show_paste_dialog()
@@ -350,14 +354,14 @@ function show_paste_dialog()
 
     local dialog_content = vb:column {
         margin = 10,
-        spacing = 10,
-
+    --    spacing = 10,
+--[[
         vb:text {
             text = "Paste Pattern Data",
             font = "big",
             style = "strong"
         },
-
+]]--
         vb:text {
             text = "Paste pattern data text here and click Apply:"
         },
@@ -397,14 +401,14 @@ local function show_main_dialog()
 
     local dialog_content = vb:column {
         margin = 10,
-        spacing = 15,
-
+        --spacing = 15,
+--[[
         vb:text {
             text = APP_NAME .. " v" .. APP_VERSION,
             font = "big",
             style = "strong"
         },
-
+]]--
         vb:text {
             text = "Clipboard-free pattern copy & paste tool"
         },
@@ -413,7 +417,7 @@ local function show_main_dialog()
             mode = "center",
 
             vb:column {
-                spacing = 10,
+           --     spacing = 10,
 
                 vb:button {
                     text = "Copy Selection",
@@ -442,34 +446,14 @@ local function show_main_dialog()
         }
     }
 
-    renoise.app():show_custom_dialog(APP_NAME, dialog_content)
+    renoise.app():show_custom_dialog(APP_NAME .. " v" .. APP_VERSION, dialog_content, keyhandler_func)
+    renoise.app().window.active_middle_frame=renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_EDITOR
 end
 
--- Menu entries
-renoise.tool():add_menu_entry {
-    name = "Main Menu:Tools:" .. APP_NAME .. "...",
-    invoke = show_main_dialog
-}
-
-renoise.tool():add_menu_entry {
-    name = "Pattern Editor:Tools:Copy Selection to Text",
-    invoke = copy_selection_to_text
-}
-
-renoise.tool():add_menu_entry {
-    name = "Pattern Editor:Tools:Paste Text Data",
-    invoke = show_paste_dialog
-}
-
--- Keybindings
-renoise.tool():add_keybinding {
-    name = "Pattern Editor:Tools:Copy Selection to Text",
-    invoke = copy_selection_to_text
-}
-
-renoise.tool():add_keybinding {
-    name = "Pattern Editor:Tools:Paste Text Data",
-    invoke = show_paste_dialog
-}
+renoise.tool():add_menu_entry{name="Main Menu:Tools:" .. APP_NAME .. "...",invoke=show_main_dialog}
+renoise.tool():add_menu_entry{name="Pattern Editor:Tools:Copy Selection to Text",invoke=copy_selection_to_text}
+renoise.tool():add_menu_entry{name="Pattern Editor:Tools:Paste Text Data",invoke=show_paste_dialog}
+renoise.tool():add_keybinding{name="Pattern Editor:Tools:Copy Selection to Text",invoke=copy_selection_to_text}
+renoise.tool():add_keybinding{name="Pattern Editor:Tools:Paste Text Data",invoke=show_paste_dialog}
 
 log(APP_NAME .. " v" .. APP_VERSION .. " loaded successfully (clipboard-independent)")
