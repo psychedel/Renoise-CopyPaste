@@ -138,7 +138,7 @@ You can assign keyboard shortcuts through:
 - The tool outputs status messages during operation
 - File path: `[Tool Directory]/debug.log` (if available)
 
-## Limitations
+## Current Limitations
 
 - Only copies basic pattern data (notes, instruments, volume, effects)
 - Does not copy track settings, device chains, or automation
