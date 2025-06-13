@@ -29,7 +29,7 @@ jobs:
         run: |
           TIMESTAMP=$(date +'%Y-%m-%d_%H-%M-%S')
           echo "TAG_NAME=$TIMESTAMP" >> $GITHUB_ENV
-          echo "FILENAME=org.psychedel.Renoise-CopyPaste_${TIMESTAMP}.xrnx" >> $GITHUB_ENV
+          echo "FILENAME=com.psychedel.Renoise-CopyPaste_${TIMESTAMP}.xrnx" >> $GITHUB_ENV
 
       # 5. Zip the package using the dynamic filename
       - name: Zip XRNX Package
