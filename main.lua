@@ -18,6 +18,8 @@ local function log(message)
     print("[" .. APP_NAME .. "] " .. tostring(message))
 end
 
+
+
 local function get_current_selection()
     local song = renoise.song()
     local selection = song.selection_in_pattern
@@ -77,7 +79,7 @@ local function format_effect(effect_number, effect_amount)
     end
 end
 
-local function copy_selection_to_text()
+local function copy_selection_to_text(show_dialog)
     local selection = get_current_selection()
     if not selection then
         renoise.app():show_status("No selection to copy")
@@ -155,8 +157,12 @@ local function copy_selection_to_text()
     log("Selection copied (" .. (selection.end_line - selection.start_line + 1) .. " lines, " ..
         (selection.end_track - selection.start_track + 1) .. " tracks)")
 
-    -- Show copy dialog with the text
-    show_copy_dialog(copied_data)
+    renoise.app():show_status("Pattern data copied")
+
+    -- Show copy dialog only if requested
+    if show_dialog ~= false then
+        show_copy_dialog(copied_data)
+    end
 end
 
 local function parse_note(note_str)
@@ -196,6 +202,58 @@ local function parse_hex_value(hex_str, empty_value)
     end
 end
 
+local function parse_effect_number(hex_str)
+    if hex_str == ".." then
+        return renoise.PatternLine.EMPTY_EFFECT_NUMBER
+    else
+        local value = tonumber(hex_str, 16)
+        if value and value >= 0 and value <= 35 then
+            return value
+        else
+            return renoise.PatternLine.EMPTY_EFFECT_NUMBER
+        end
+    end
+end
+
+local function parse_effect_amount(hex_str)
+    if hex_str == ".." then
+        return renoise.PatternLine.EMPTY_EFFECT_AMOUNT
+    else
+        local value = tonumber(hex_str, 16)
+        if value and value >= 0 and value <= 255 then
+            return value
+        else
+            return renoise.PatternLine.EMPTY_EFFECT_AMOUNT
+        end
+    end
+end
+
+local function parse_instrument_value(hex_str)
+    if hex_str == ".." then
+        return renoise.PatternLine.EMPTY_INSTRUMENT
+    else
+        local value = tonumber(hex_str, 16)
+        if value and value >= 0 and value <= 255 then
+            return value
+        else
+            return renoise.PatternLine.EMPTY_INSTRUMENT
+        end
+    end
+end
+
+local function parse_volume_value(hex_str)
+    if hex_str == ".." then
+        return renoise.PatternLine.EMPTY_VOLUME
+    else
+        local value = tonumber(hex_str, 16)
+        if value and value >= 0 and value <= 127 then
+            return value
+        else
+            return renoise.PatternLine.EMPTY_VOLUME
+        end
+    end
+end
+
 local function apply_text_data(text_data)
     if not text_data or text_data == "" then
         renoise.app():show_status("No data to paste")
@@ -230,8 +288,16 @@ local function apply_text_data(text_data)
     end
 
     local song = renoise.song()
+
+    -- Add undo point
+    song:describe_undo("Paste Pattern Data")
+
     local pattern = song.selected_pattern
     local paste_line = selection.start_line
+    local lines_processed = 0
+    local errors_encountered = 0
+
+    log("Starting paste operation: " .. (data_end - data_start + 1) .. " lines to process")
 
     -- Paste data
     for i = data_start, data_end do
@@ -247,53 +313,81 @@ local function apply_text_data(text_data)
             for track_data in line_data:gmatch("|([^|]*)") do
                 if track_idx > selection.end_track then break end
 
-                local track = pattern:track(track_idx)
-                local line = track:line(paste_line)
+                local success, error_msg = pcall(function()
+                    local track = pattern:track(track_idx)
+                    local line = track:line(paste_line)
+                    local song_track = song.tracks[track_idx]
 
-                -- Parse note columns and effects from track_data
-                local parts = {}
-                for part in track_data:gmatch("%S+") do
-                    table.insert(parts, part)
-                end
-
-                -- Apply note column data
-                if #parts >= 3 then
-                    if #line.note_columns > 0 then
-                        local note_col = line.note_columns[1]
-                        note_col.note_value = parse_note(parts[1])
-                        note_col.instrument_value = parse_hex_value(parts[2], renoise.PatternLine.EMPTY_INSTRUMENT)
-                        note_col.volume_value = parse_hex_value(parts[3], renoise.PatternLine.EMPTY_VOLUME)
+                    -- Parse note columns and effects from track_data
+                    local parts = {}
+                    for part in track_data:gmatch("%S+") do
+                        table.insert(parts, part)
                     end
-                end
 
-                -- Apply effect column data
-                if #parts >= 4 then
-                    if #line.effect_columns > 0 then
-                        local fx_col = line.effect_columns[1]
-                        local effect_str = parts[4]
-                        if effect_str ~= "...." then
-                            fx_col.number_value = parse_hex_value(effect_str:sub(1, 2),
-                                renoise.PatternLine.EMPTY_EFFECT_NUMBER)
-                            fx_col.amount_value = parse_hex_value(effect_str:sub(3, 4),
-                                renoise.PatternLine.EMPTY_EFFECT_AMOUNT)
-                        else
-                            fx_col.number_value = renoise.PatternLine.EMPTY_EFFECT_NUMBER
-                            fx_col.amount_value = renoise.PatternLine.EMPTY_EFFECT_AMOUNT
+                    -- Apply multi-column note data
+                    local visible_note_cols = song_track.visible_note_columns
+                    local note_col_idx = 1
+                    local part_idx = 1
+
+                    -- Process note columns (groups of 3: note, instrument, volume)
+                    while note_col_idx <= visible_note_cols and part_idx + 2 <= #parts do
+                        if note_col_idx <= #line.note_columns then
+                            local note_col = line.note_columns[note_col_idx]
+                            note_col.note_value = parse_note(parts[part_idx])
+                            note_col.instrument_value = parse_instrument_value(parts[part_idx + 1])
+                            note_col.volume_value = parse_volume_value(parts[part_idx + 2])
                         end
+                        note_col_idx = note_col_idx + 1
+                        part_idx = part_idx + 3
                     end
+
+                    -- Apply multi-column effect data
+                    local visible_fx_cols = song_track.visible_effect_columns
+                    local fx_col_idx = 1
+
+                    -- Process effect columns (starting after note columns)
+                    while fx_col_idx <= visible_fx_cols and part_idx <= #parts do
+                        if fx_col_idx <= #line.effect_columns then
+                            local fx_col = line.effect_columns[fx_col_idx]
+                            local effect_str = parts[part_idx]
+                            if effect_str and effect_str ~= "...." and effect_str:len() >= 4 then
+                                fx_col.number_value = parse_effect_number(effect_str:sub(1, 2))
+                                fx_col.amount_value = parse_effect_amount(effect_str:sub(3, 4))
+                            else
+                                fx_col.number_value = renoise.PatternLine.EMPTY_EFFECT_NUMBER
+                                fx_col.amount_value = renoise.PatternLine.EMPTY_EFFECT_AMOUNT
+                            end
+                        end
+                        fx_col_idx = fx_col_idx + 1
+                        part_idx = part_idx + 1
+                    end
+                end)
+
+                if not success then
+                    errors_encountered = errors_encountered + 1
+                    log("Error processing track " ..
+                    track_idx .. " at line " .. paste_line .. ": " .. tostring(error_msg))
                 end
 
                 track_idx = track_idx + 1
             end
+            lines_processed = lines_processed + 1
         end
 
         paste_line = paste_line + 1
     end
 
-    log("Pattern data pasted successfully")
-    renoise.app():show_status("Pattern data pasted successfully")
+    if errors_encountered > 0 then
+        log("Pattern data pasted with " .. errors_encountered .. " errors (" .. lines_processed .. " lines processed)")
+        renoise.app():show_status("Pattern data pasted with " .. errors_encountered .. " errors")
+    else
+        log("Pattern data pasted successfully (" .. lines_processed .. " lines processed)")
+        renoise.app():show_status("Pattern data pasted successfully")
+    end
     return true
 end
+
+
 
 function show_copy_dialog(text_data)
     if copy_dialog and copy_dialog.visible then
@@ -354,14 +448,14 @@ function show_paste_dialog()
 
     local dialog_content = vb:column {
         margin = 10,
-    --    spacing = 10,
---[[
+        --    spacing = 10,
+        --[[
         vb:text {
             text = "Paste Pattern Data",
             font = "big",
             style = "strong"
         },
-]]--
+]] --
         vb:text {
             text = "Paste pattern data text here and click Apply:"
         },
@@ -402,28 +496,28 @@ local function show_main_dialog()
     local dialog_content = vb:column {
         margin = 10,
         --spacing = 15,
---[[
+        --[[
         vb:text {
             text = APP_NAME .. " v" .. APP_VERSION,
             font = "big",
             style = "strong"
         },
-]]--
+]] --
         vb:text {
-            text = "Clipboard-free pattern copy & paste tool"
+            text = "Enhanced pattern copy & paste tool with multi-column support"
         },
 
         vb:horizontal_aligner {
             mode = "center",
 
             vb:column {
-           --     spacing = 10,
+                --     spacing = 10,
 
                 vb:button {
                     text = "Copy Selection",
                     width = 200,
                     height = 30,
-                    notifier = copy_selection_to_text
+                    notifier = function() copy_selection_to_text(true) end
                 },
 
                 vb:button {
@@ -437,23 +531,30 @@ local function show_main_dialog()
 
         vb:text {
             text = "Instructions:\n" ..
-                "1. Select pattern area\n" ..
-                "2. Click 'Copy Selection'\n" ..
-                "3. Copy text from dialog\n" ..
-                "4. Share or save the text\n" ..
-                "5. Select destination area\n" ..
-                "6. Click 'Paste Data' and paste text"
+                "• Use Ctrl+A to select entire pattern in Renoise\n" ..
+                "• Copy: Shows dialog for text handling and sharing\n" ..
+                "• Multi-column: Supports multiple note/effect columns\n" ..
+                "• Undo: Pattern edits integrate with Renoise undo"
         }
     }
 
     renoise.app():show_custom_dialog(APP_NAME .. " v" .. APP_VERSION, dialog_content, keyhandler_func)
-    renoise.app().window.active_middle_frame=renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_EDITOR
+    renoise.app().window.active_middle_frame = renoise.ApplicationWindow.MIDDLE_FRAME_PATTERN_EDITOR
 end
 
-renoise.tool():add_menu_entry{name="Main Menu:Tools:" .. APP_NAME .. "...",invoke=show_main_dialog}
-renoise.tool():add_menu_entry{name="Pattern Editor:Tools:Copy Selection to Text",invoke=copy_selection_to_text}
-renoise.tool():add_menu_entry{name="Pattern Editor:Tools:Paste Text Data",invoke=show_paste_dialog}
-renoise.tool():add_keybinding{name="Pattern Editor:Tools:Copy Selection to Text",invoke=copy_selection_to_text}
-renoise.tool():add_keybinding{name="Pattern Editor:Tools:Paste Text Data",invoke=show_paste_dialog}
+-- Menu entries
+renoise.tool():add_menu_entry { name = "Main Menu:Tools:" .. APP_NAME .. "...", invoke = show_main_dialog }
+renoise.tool():add_menu_entry { name = "Pattern Editor:Tools:Copy Selection to Text", invoke = function()
+    copy_selection_to_text(true)
+end }
+renoise.tool():add_menu_entry { name = "Pattern Editor:Tools:Paste Text Data", invoke = show_paste_dialog }
 
-log(APP_NAME .. " v" .. APP_VERSION .. " loaded successfully (clipboard-independent)")
+
+-- Keybindings
+renoise.tool():add_keybinding { name = "Pattern Editor:Tools:Copy Selection to Text", invoke = function()
+    copy_selection_to_text(true)
+end }
+renoise.tool():add_keybinding { name = "Pattern Editor:Tools:Paste Text Data", invoke = show_paste_dialog }
+
+
+log(APP_NAME .. " v" .. APP_VERSION .. " loaded successfully (with multi-column support & undo integration)")
