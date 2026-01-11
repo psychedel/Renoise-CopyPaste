@@ -1,167 +1,187 @@
-# Simple Copy Paste Tool for Renoise - Usage Guide
+# Copy Paste Tool for Renoise - AI Collaboration Edition
 
 ## Overview
 
-This is a copy-paste tool for Renoise that allows you to copy pattern selections as text and paste them back, with additional save/load functionality for .regpat files.
-The final goal is to support full format specified in FORMAT_SPECIFICATION.md (under review, matter of change).
+An enhanced copy-paste tool for Renoise that allows you to copy pattern selections as human-readable text, share them with AI assistants (ChatGPT, Claude, etc.), and paste modified patterns back. Includes save/load functionality for `.regpat` files.
+
+**Version:** 0.4  
+**API Version:** 6+  
+**Author:** Psychedel (enhanced with Paketti patterns)
+
+## Features
+
+### Core Functions
+- **Copy Selection to Text**: Convert pattern data to shareable text format
+- **Paste Text Data**: Apply text pattern data back to Renoise
+- **Mix-Paste**: Only paste into empty cells (Impulse Tracker Alt-M style)
+- **Quick Copy (No Dialog)**: Fast copy without opening dialog
+- **Save/Load Pattern Files**: Export and import patterns as `.regpat` files
+- **AI Collaboration Workflow**: Designed for sharing with AI assistants
+
+### Pattern Data Support
+- **Full Note Columns**: Note, Instrument, Volume, Panning, Delay, Sample Effects
+- **Multiple Note Columns**: All visible note columns per track
+- **Effect Columns**: All visible effect columns per track
+- **Multiple Tracks**: Copy across any number of tracks
+- **Song Context**: BPM, LPB, pattern number included in header
+
+### Technical Features
+- **Undo Integration**: All paste operations create undo points
+- **MIDI Mappings**: Control via MIDI controllers
+- **Keyboard Shortcuts**: Assignable keybindings
+- **Dialog Management**: Proper Escape key handling
+- **Error Handling**: Graceful error recovery with logging
 
 ## Installation
 
-1. Copy the entire `com.psychedel.CopyPaste.xrnx` folder to your Renoise Tools directory:
+1. Copy the entire folder to your Renoise Tools directory:
    - **Windows**: `%APPDATA%\Renoise\V3.x.x\Scripts\Tools\`
    - **macOS**: `~/Library/Preferences/Renoise/V3.x.x/Scripts/Tools/`
    - **Linux**: `~/.renoise/V3.x.x/Scripts/Tools/`
 
 2. Restart Renoise or use "Tools > Reload All Tools"
 
-## Features
+## .regpat File Format (V2)
 
-### Core Functions
-- **Dialog-based Copy/Paste**: Text handling for manual editing and sharing
-- **Save/Load Pattern Files**: Export and import patterns as .regpat files
-- **Multi-Column Support**: Handles multiple note and effect columns per track
-- **Undo Integration**: All paste operations integrate with Renoise's undo system
-- **Simple Format**: Easy to read and edit text representation
-
-### What Gets Copied
-- Note data (note, instrument, volume) - all visible note columns
-- Effect commands - all visible effect columns
-- Track names and selection info
-- Pattern line numbers
-- Full multi-column pattern structure
-
-### File I/O Functions
-- **Save Pattern**: Export copied pattern data to .regpat files
-- **Load Pattern**: Import pattern data from .regpat or .txt files
-- **File Format**: Standard text format compatible with external editing
-
-## .regpat File Format
-
-The tool uses a simple text format for pattern files:
+The tool uses an enhanced text format:
 
 ```
 === RENOISE PATTERN DATA ===
-Format: Simple-V1
-Selection: L001-016 T001-005
+Format: CopyPaste-V2
+BPM: 140 | LPB: 4 | Pattern: 01 | Lines: 64
+Selection: L001-016 T001-003
 
-Line | T01:Track Name | T02:Track Name | T03:Track Name
-001 | C-4 01 7F 40 00 ---- | --- .. .. .. .. ---- | F#4 03 60 -- -- ----
-002 | --- .. .. .. .. ---- | D-3 02 7F 40 00 ---- | --- .. .. .. .. ----
+Line | T01:Kick Drum (N:1 F:2) | T02:Snare (N:1 F:1) | T03:Bass (N:2 F:1)
+
+001 | C-4 01 80 40 00 .... 0B40 | --- .. .. .. .. .... .... | C-3 05 7F .. .. .... ....
+002 | --- .. .. .. .. .... .... | D-4 02 7F 40 00 .... .... | --- .. .. .. .. .... ....
 ...
 === END PATTERN DATA ===
 ```
 
 ### Format Elements
-- **Note**: Musical note (C-4, D#5, etc.) or `---` for empty
-- **Instrument**: Hex value (01-FF) or `..` for empty
-- **Volume**: Hex value (00-7F) or `..` for empty
-- **Effects**: Hex effect commands (0A20, 1200, etc.) or `----` for empty
+
+**Note Column (6 parts):**
+- `C-4` - Note (C-0 to B-9, `---` empty, `OFF` note-off)
+- `01` - Instrument (00-FF hex, `..` empty)
+- `80` - Volume (00-7F hex, `..` empty)
+- `40` - Panning (00-7F hex, `..` empty)
+- `00` - Delay (00-FF hex, `..` empty)
+- `....` - Sample Effect (XXYY hex, `....` empty)
+
+**Effect Column:**
+- `0B40` - Effect command (XXYY hex, `....` empty)
 
 ## How to Use
 
-### Basic Copy/Paste Workflow
+### Basic Workflow
 
-1. **Select Pattern Area**
-   - In the Pattern Editor, select the area you want to copy
-   - Use Ctrl+A to select entire pattern, or mouse selection for specific areas
-   - Can be single or multiple tracks with multiple columns
+1. **Select Pattern Area** in Pattern Editor
+   - Use Ctrl+A for entire pattern, or mouse selection
 
-2. **Copy with Dialog**
-   - Use menu: `Pattern Editor > Copy Selection as Text`
-   - Or click "Copy Selection" button in the tool dialog
-   - View/edit text in dialog and manually copy to clipboard
+2. **Copy Selection**
+   - Menu: `Pattern Editor > Copy Paste > Copy Selection to Text...`
+   - Or use assigned keyboard shortcut
 
-3. **Paste with Dialog**
+3. **Share with AI**
+   - Copy the text from the dialog
+   - Paste into ChatGPT, Claude, or other AI assistant
+   - Ask for modifications (transpose, add variations, etc.)
+
+4. **Paste AI's Response**
    - Select destination area in Pattern Editor
-   - Use menu: `Pattern Editor > Paste Text Data`
-   - Or click "Paste Data" button in the tool dialog
-   - Paste and edit text before applying to pattern
-   - Automatically creates undo point
+   - Menu: `Pattern Editor > Copy Paste > Paste Text Data...`
+   - Paste the AI's modified pattern and click Apply
 
-### Save/Load Pattern Files
+### Quick Copy Workflow
 
-#### Saving Patterns
-1. **Copy a Selection** first (steps 1-2 above)
-2. **Click "Save Pattern"** in the tool dialog
-3. **Choose filename** - .regpat extension will be added automatically
-4. **Select location** - patterns folder recommended for organization
-5. **File is saved** and ready for sharing or later use
+For faster operation without dialogs:
+- Use "Quick Copy (No Dialog)" to copy silently
+- Data is stored in memory for pasting
 
-#### Loading Patterns
-1. **Click "Load Pattern"** in the tool dialog or menu
-2. **Select .regpat file** from the file browser
-3. **Review confirmation dialog** showing pattern dimensions and target area
-4. **Click "Load Pattern"** to apply directly to your song
-5. **Pattern automatically applied** using the original file dimensions (no selection required)
+### Mix-Paste Workflow (Impulse Tracker Alt-M Style)
 
+Mix-Paste only fills empty cells, preserving existing data:
 
+1. **Copy your pattern data** (melody, effects, etc.)
+2. **Move to destination** with existing content
+3. **Use Mix-Paste** instead of regular paste
+4. **Result**: New data fills gaps without overwriting existing notes
 
-### Text Format Example
+This is perfect for:
+- Layering patterns together
+- Adding effects to existing melodies
+- Merging multiple pattern clips non-destructively
 
-```
-=== RENOISE PATTERN DATA ===
-Format: Simple-V1
-Selection: L001-004 T001-002
+### File Workflow
 
-Line | T01:Track 01 | T02:Track 02
+**Save Pattern:**
+1. Copy a selection first
+2. Click "Save to File" or use menu
+3. Choose location and filename (`.regpat` extension)
 
-001 | C-5 01 40 0A00 | --- .. .. ....
-002 | --- .. .. .... | D-5 02 30 0B10
-003 | E-5 01 50 .... | --- .. .. ....
-004 | OFF .. .. .... | F-5 03 60 0C20
-
-=== END PATTERN DATA ===
-```
-
-### Format Explanation
-
-- **Line numbers**: `001`, `002`, etc.
-- **Note format**: `C-5` (note + octave), `---` (empty), `OFF` (note off)
-- **Instrument**: `01` (hex), `..` (empty)
-- **Volume**: `40` (hex), `..` (empty)
-- **Effect**: `0A00` (effect + value), `....` (empty)
+**Load Pattern:**
+1. Click "Load from File" or use menu
+2. Select `.regpat` or `.txt` file
+3. Review confirmation dialog
+4. Pattern applies using original file dimensions
 
 ## Menu Locations
 
 ### Main Menu
-- `Main Menu > Tools > Copy Paste...` - Opens main dialog with all options
+- `Main Menu > Tools > Copy Paste...` - Opens main dialog
 
-### Pattern Editor
-- `Pattern Editor > Copy Selection as Text` - Copy with dialog
-- `Pattern Editor > Paste Text Data` - Paste with dialog
+### Pattern Editor Context Menu
+- `Pattern Editor > Copy Paste > Copy Selection to Text...`
+- `Pattern Editor > Copy Paste > Quick Copy (No Dialog)`
+- `Pattern Editor > Copy Paste > Paste Text Data...`
+- `Pattern Editor > Copy Paste > Mix-Paste (Empty Cells Only)`
+- `Pattern Editor > Copy Paste > Save Pattern to File...`
+- `Pattern Editor > Copy Paste > Load Pattern from File...`
 
 ## Keyboard Shortcuts
 
-You can assign keyboard shortcuts through:
-1. `Edit > Preferences > Keys`
-2. Look for:
-   - `Pattern Editor > Tools > Copy Selection as Text`
-   - `Pattern Editor > Tools > Paste Text Data`
+Assign through `Edit > Preferences > Keys`:
+
+- `Pattern Editor:Copy Paste:Show Main Dialog`
+- `Pattern Editor:Copy Paste:Copy Selection to Text`
+- `Pattern Editor:Copy Paste:Quick Copy (No Dialog)`
+- `Pattern Editor:Copy Paste:Paste Text Data`
+- `Pattern Editor:Copy Paste:Mix-Paste (Empty Cells Only)`
+- `Pattern Editor:Copy Paste:Save Pattern to File`
+- `Pattern Editor:Copy Paste:Load Pattern from File`
 
 **Recommended shortcuts:**
 - Copy Selection: `Ctrl+Shift+C`
+- Quick Copy: `Ctrl+Alt+C`
 - Paste Data: `Ctrl+Shift+V`
+- Mix-Paste: `Alt+M` (Impulse Tracker style)
 
-## Tips and Best Practices
+## MIDI Mappings
 
-### For Music Production
-- **Multi-column support**: Copy complex patterns with multiple note/effect columns
-- **Undo safety**: All paste operations can be undone with Ctrl+Z
-- Copy drum patterns to share with collaborators
-- Share musical ideas via text (Discord, forums, etc.)
+Available in `MIDI Mappings`:
 
-### For AI Collaboration
-- The text format is perfect for sharing with AI assistants
-- You can describe changes in plain text and paste results back
-- AI can help analyze and modify patterns
-- Easy to version control with Git
+- `Copy Paste:Copy Selection to Text`
+- `Copy Paste:Quick Copy (No Dialog)`
+- `Copy Paste:Paste Text Data`
+- `Copy Paste:Mix-Paste (Empty Cells Only)`
+- `Copy Paste:Show Main Dialog`
 
-### Editing Text Manually
-- Use any text editor to modify the pattern data
-- **Dialog editing**: Use "Paste Text Data" for in-app text editing
-- Maintain the exact format structure
-- Be careful with spacing and separators (`|`)
-- Multi-column data is properly aligned and parsed
+## AI Collaboration Tips
+
+### Effective Prompts
+
+```
+"Transpose this pattern up 5 semitones"
+"Add swing to the hi-hat (vary the delay values)"
+"Create a variation with different velocities"
+"Double the pattern length with variations"
+"Add a bass line that follows this chord progression"
+```
+
+### AI Prompt Template
+
+See `AI_COLLABORATION_GUIDE.md` for a complete prompt template to share with AI assistants.
 
 ## Troubleshooting
 
@@ -169,31 +189,52 @@ You can assign keyboard shortcuts through:
 
 **"No selection to copy"**
 - Make sure you have selected an area in the Pattern Editor
-- Even a single cell counts as a selection
 
 **"No data to paste"**
-- Copy some pattern data first
-- Check that clipboard contains valid pattern data
+- Copy some pattern data first, or paste text into the dialog
 
 **"No valid pattern data found"**
-- Ensure the text format is correct
-- Check for proper headers and line numbers
-- Verify the `=== RENOISE PATTERN DATA ===` header exists
+- Ensure the text has proper format headers
+- Check for `=== RENOISE PATTERN DATA ===` header
 
 **Pasted data looks wrong**
-- Check that destination selection is appropriate size
-- Verify track count matches source data
-- Ensure you're pasting to the correct pattern/location
+- Verify track column counts match between source and destination
+- Check that you're pasting to the correct pattern
 
 ### Debug Information
-- Check Renoise's console for error messages
-- The tool outputs status messages during operation
-- File path: `[Tool Directory]/debug.log` (if available)
 
-## Current Limitations
+- Check Renoise's console (View > Show Scripting Console) for log messages
+- Messages prefixed with `[Copy Paste]`
 
-- Only copies basic pattern data (notes, instruments, volume, effects)
-- Does not copy track settings, device chains, or automation
-- Copies all visible note/effect columns (no longer limited to first column)
-- No advanced formatting options
-- Does not preserve column visibility settings on paste
+## Changelog
+
+### v0.4 (Current)
+- **Mix-Paste mode**: Only paste into empty cells (Impulse Tracker Alt-M style)
+- Paste dialog now has two buttons: "Paste (Overwrite)" and "Mix-Paste (Empty Only)"
+- Dedicated menu entry, keybinding, and MIDI mapping for Mix-Paste
+- Status messages indicate when mix-paste mode was used
+
+### v0.3
+- Enhanced format with full note column support (Pan, Delay, Sample FX)
+- Song context in header (BPM, LPB, Pattern, Lines)
+- Track column counts in header (N:x F:y)
+- MIDI mappings support
+- Quick Copy mode (no dialog)
+- Proper Escape key handling in all dialogs
+- Keyboard focus restoration after dialogs
+- Improved error handling and logging
+- Monospace font in text dialogs
+- Dialog state management (proper cleanup)
+
+### v0.2
+- Multi-column support (note and effect columns)
+- File I/O (.regpat format)
+- Undo integration
+
+### v0.1
+- Initial release
+- Basic copy/paste functionality
+
+## License
+
+See LICENSE file.

@@ -2,10 +2,10 @@
 <RenoiseScriptingTool doc_version="0">
   <Name>Copy Paste Tool</Name>
   <Id>com.psychedel.CopyPaste</Id>
-  <Version>0.2</Version>
+  <Version>0.4</Version>
   <ApiVersion>6</ApiVersion>
   <Author>Psychedel</Author>
-  <Description>Tool for easy text copy/paste of pattern data between Renoise and external applications, with save/load functionality for .regpat files</Description>
+  <Description>Enhanced pattern copy/paste tool for AI collaboration. Copy pattern data as human-readable text, share with AI assistants (ChatGPT, Claude, etc.), and paste modified data back. Features: Full note columns (Note, Instrument, Volume, Panning, Delay, Sample Effects), Mix-Paste mode (only fill empty cells - Impulse Tracker Alt-M style), multiple tracks, effect columns, file I/O (.regpat), MIDI mappings, and undo integration.</Description>
   <Category>Pattern Editor</Category>
   <Homepage>https://github.com/psychedel/Renoise-CopyPaste</Homepage>
 </RenoiseScriptingTool>
