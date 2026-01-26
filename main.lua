@@ -208,7 +208,7 @@ local function parse_delay_value(hex_str)
         return renoise.PatternLine.EMPTY_DELAY
     else
         local value = tonumber(hex_str, 16)
-        if value and value >= 0 and value <= 255 then
+        if value and value >= 0 and value <= 127 then
             return value
         else
             return renoise.PatternLine.EMPTY_DELAY

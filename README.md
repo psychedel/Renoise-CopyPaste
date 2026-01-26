@@ -79,7 +79,13 @@ Line | T01:Kick Drum (N:1 F:2) | T02:Snare (N:1 F:1) | T03:Bass (N:2 F:1)
 **Effect Column:**
 - `0B40` - Effect command (XXYY hex, `....` empty)
 
-## How to Use
+**Note Column (6 parts):**
+- `C-4` - Note (C-0 to B-9, `---` empty, `OFF` note-off)
+- `01` - Instrument (00-FF hex, `..` empty)
+- `80` - Volume (00-7F hex, `..` empty)
+- `40` - Panning (00-7F hex, `..` empty)
+- `00` - Delay (00-FF hex, `..` empty)
+- `....` - Sample Effect (XXYY hex, `....` empty)
 
 ### Basic Workflow
 
