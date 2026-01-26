@@ -2,7 +2,7 @@
 -- Enhanced with patterns from Paketti
 
 local APP_NAME = "Copy Paste"
-local APP_VERSION = "0.4"
+local APP_VERSION = "0.5"
 
 --------------------------------------------------------------------------------
 -- Global state for storing copied data
@@ -14,6 +14,11 @@ local paste_dialog = nil
 local load_confirm_dialog = nil
 local main_dialog = nil
 local save_dialog = nil
+
+--------------------------------------------------------------------------------
+-- Paketti Clipboard file path (persistent temp file)
+--------------------------------------------------------------------------------
+local PAKETTI_CLIPBOARD_FILE = renoise.tool().bundle_path .. "paketti_clipboard.txt"
 
 --------------------------------------------------------------------------------
 -- Keyhandler function (Paketti pattern)
@@ -203,7 +208,7 @@ local function parse_delay_value(hex_str)
         return renoise.PatternLine.EMPTY_DELAY
     else
         local value = tonumber(hex_str, 16)
-        if value and value >= 0 and value <= 255 then
+        if value and value >= 0 and value <= 127 then
             return value
         else
             return renoise.PatternLine.EMPTY_DELAY
@@ -556,6 +561,179 @@ local function mix_paste_from_buffer()
     local success = apply_text_data(copied_data, false, true)
     if not success then
         renoise.app():show_status("Mix-paste failed")
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Paketti Clipboard Functions (File-based Cut/Copy/Paste)
+--------------------------------------------------------------------------------
+
+-- Write pattern data to the Paketti clipboard file
+local function write_to_paketti_clipboard(pattern_data)
+    local file, err = io.open(PAKETTI_CLIPBOARD_FILE, "w")
+    if not file then
+        log("Failed to write to Paketti clipboard: " .. tostring(err))
+        return false
+    end
+    file:write(pattern_data)
+    file:close()
+    log("Pattern data written to Paketti clipboard file")
+    return true
+end
+
+-- Read pattern data from the Paketti clipboard file
+local function read_from_paketti_clipboard()
+    local file, err = io.open(PAKETTI_CLIPBOARD_FILE, "r")
+    if not file then
+        log("Failed to read from Paketti clipboard: " .. tostring(err))
+        return nil
+    end
+    local content = file:read("*all")
+    file:close()
+    if content and content ~= "" then
+        log("Pattern data read from Paketti clipboard file")
+        return content
+    end
+    return nil
+end
+
+-- Clear the current selection in the pattern
+local function clear_current_selection()
+    local selection = get_current_selection()
+    if not selection then
+        log("No selection to clear")
+        return false
+    end
+    
+    local song = renoise.song()
+    local pattern = song.selected_pattern
+    
+    song:describe_undo("Paketti Cut - Clear Selection")
+    
+    for line_idx = selection.start_line, selection.end_line do
+        for track_idx = selection.start_track, selection.end_track do
+            if track_idx <= #song.tracks then
+                local track = pattern:track(track_idx)
+                local line = track:line(line_idx)
+                local song_track = song.tracks[track_idx]
+                
+                -- Clear note columns
+                local visible_note_cols = song_track.visible_note_columns
+                for col_idx = 1, visible_note_cols do
+                    if col_idx <= #line.note_columns then
+                        local note_col = line.note_columns[col_idx]
+                        note_col.note_value = 120 -- Empty
+                        note_col.instrument_value = renoise.PatternLine.EMPTY_INSTRUMENT
+                        note_col.volume_value = renoise.PatternLine.EMPTY_VOLUME
+                        note_col.panning_value = renoise.PatternLine.EMPTY_PANNING
+                        note_col.delay_value = renoise.PatternLine.EMPTY_DELAY
+                        note_col.effect_number_value = renoise.PatternLine.EMPTY_EFFECT_NUMBER
+                        note_col.effect_amount_value = renoise.PatternLine.EMPTY_EFFECT_AMOUNT
+                    end
+                end
+                
+                -- Clear effect columns
+                local visible_fx_cols = song_track.visible_effect_columns
+                for col_idx = 1, visible_fx_cols do
+                    if col_idx <= #line.effect_columns then
+                        local fx_col = line.effect_columns[col_idx]
+                        fx_col.number_value = renoise.PatternLine.EMPTY_EFFECT_NUMBER
+                        fx_col.amount_value = renoise.PatternLine.EMPTY_EFFECT_AMOUNT
+                    end
+                end
+            end
+        end
+    end
+    
+    local lines_count = selection.end_line - selection.start_line + 1
+    local tracks_count = selection.end_track - selection.start_track + 1
+    log("Selection cleared: " .. lines_count .. " lines, " .. tracks_count .. " tracks")
+    return true
+end
+
+-- Paketti Copy: Copy selection to clipboard file (no dialog)
+local function paketti_copy()
+    local data = copy_selection_to_text(false)
+    if data then
+        if write_to_paketti_clipboard(data) then
+            local selection = get_current_selection()
+            if selection then
+                local lines_count = selection.end_line - selection.start_line + 1
+                local tracks_count = selection.end_track - selection.start_track + 1
+                renoise.app():show_status(string.format("Paketti Copy: %d lines, %d tracks copied to clipboard", lines_count, tracks_count))
+            else
+                renoise.app():show_status("Paketti Copy: Pattern data copied to clipboard")
+            end
+        else
+            renoise.app():show_status("Paketti Copy: Failed to write to clipboard file")
+        end
+    else
+        renoise.app():show_status("Paketti Copy: No selection to copy")
+    end
+end
+
+-- Paketti Cut: Copy selection to clipboard file, then clear selection
+local function paketti_cut()
+    local data = copy_selection_to_text(false)
+    if data then
+        if write_to_paketti_clipboard(data) then
+            local selection = get_current_selection()
+            local lines_count = 0
+            local tracks_count = 0
+            if selection then
+                lines_count = selection.end_line - selection.start_line + 1
+                tracks_count = selection.end_track - selection.start_track + 1
+            end
+            
+            -- Now clear the selection
+            if clear_current_selection() then
+                renoise.app():show_status(string.format("Paketti Cut: %d lines, %d tracks cut to clipboard", lines_count, tracks_count))
+            else
+                renoise.app():show_status("Paketti Cut: Copied but failed to clear selection")
+            end
+        else
+            renoise.app():show_status("Paketti Cut: Failed to write to clipboard file")
+        end
+    else
+        renoise.app():show_status("Paketti Cut: No selection to cut")
+    end
+end
+
+-- Paketti Paste: Read from clipboard file and paste at current position
+local function paketti_paste()
+    local clipboard_data = read_from_paketti_clipboard()
+    if not clipboard_data then
+        renoise.app():show_status("Paketti Paste: Clipboard is empty. Use Paketti Copy first.")
+        return
+    end
+    
+    -- Store in the internal buffer as well
+    copied_data = clipboard_data
+    
+    local success = apply_text_data(clipboard_data, false, false)
+    if success then
+        renoise.app():show_status("Paketti Paste: Pattern data pasted successfully")
+    else
+        renoise.app():show_status("Paketti Paste: Failed to paste pattern data")
+    end
+end
+
+-- Paketti Mix-Paste: Read from clipboard file and paste only into empty cells
+local function paketti_mix_paste()
+    local clipboard_data = read_from_paketti_clipboard()
+    if not clipboard_data then
+        renoise.app():show_status("Paketti Mix-Paste: Clipboard is empty. Use Paketti Copy first.")
+        return
+    end
+    
+    -- Store in the internal buffer as well
+    copied_data = clipboard_data
+    
+    local success = apply_text_data(clipboard_data, false, true)
+    if success then
+        renoise.app():show_status("Paketti Mix-Paste: Pattern data pasted into empty cells")
+    else
+        renoise.app():show_status("Paketti Mix-Paste: Failed to paste pattern data")
     end
 end
 
@@ -1010,6 +1188,11 @@ local function show_main_dialog()
             vb:column {
                 spacing = 5,
 
+                vb:text {
+                    text = "AI Collaboration:",
+                    font = "bold"
+                },
+
                 vb:row {
                     spacing = 5,
                     vb:button {
@@ -1044,6 +1227,47 @@ local function show_main_dialog()
                         height = 30,
                         notifier = show_load_dialog
                     }
+                },
+
+                vb:space { height = 10 },
+
+                vb:text {
+                    text = "Paketti Clipboard:",
+                    font = "bold"
+                },
+
+                vb:row {
+                    spacing = 5,
+                    vb:button {
+                        text = "Paketti Copy",
+                        width = 100,
+                        height = 30,
+                        notifier = paketti_copy
+                    },
+
+                    vb:button {
+                        text = "Paketti Cut",
+                        width = 100,
+                        height = 30,
+                        notifier = paketti_cut
+                    }
+                },
+
+                vb:row {
+                    spacing = 5,
+                    vb:button {
+                        text = "Paketti Paste",
+                        width = 100,
+                        height = 30,
+                        notifier = paketti_paste
+                    },
+
+                    vb:button {
+                        text = "Paketti Mix-Paste",
+                        width = 100,
+                        height = 30,
+                        notifier = paketti_mix_paste
+                    }
                 }
             }
         },
@@ -1051,15 +1275,19 @@ local function show_main_dialog()
         vb:space { height = 5 },
 
         vb:text {
-            text = "Instructions:\n" ..
-                "1. Select pattern data in Pattern Editor (Ctrl+A for all)\n" ..
-                "2. Click 'Copy Selection' to generate shareable text\n" ..
-                "3. Share text with AI (ChatGPT, Claude, etc.)\n" ..
-                "4. Paste AI's modified text back using 'Paste Data'\n" ..
+            text = "AI Collaboration:\n" ..
+                "1. Select pattern data in Pattern Editor\n" ..
+                "2. 'Copy Selection' generates shareable text\n" ..
+                "3. Share with AI (ChatGPT, Claude, etc.)\n" ..
+                "4. 'Paste Data' applies AI's modifications\n" ..
+                "\n" ..
+                "Paketti Clipboard:\n" ..
+                "• Copy/Cut/Paste using persistent file\n" ..
+                "• Works across Renoise sessions\n" ..
+                "• Mix-Paste: Only fills empty cells\n" ..
                 "\n" ..
                 "Features:\n" ..
                 "• Full note columns: Note, Instr, Vol, Pan, Delay, SampleFX\n" ..
-                "• Mix-Paste: Only fills empty cells (Impulse Tracker Alt-M)\n" ..
                 "• Save/Load .regpat files for offline storage\n" ..
                 "• Undo integration (Ctrl+Z to revert)"
         }
@@ -1128,6 +1356,26 @@ renoise.tool():add_menu_entry {
     invoke = mix_paste_from_buffer 
 }
 
+renoise.tool():add_menu_entry { 
+    name = "--Pattern Editor:" .. APP_NAME .. ":Paketti Copy", 
+    invoke = paketti_copy 
+}
+
+renoise.tool():add_menu_entry { 
+    name = "Pattern Editor:" .. APP_NAME .. ":Paketti Cut", 
+    invoke = paketti_cut 
+}
+
+renoise.tool():add_menu_entry { 
+    name = "Pattern Editor:" .. APP_NAME .. ":Paketti Paste", 
+    invoke = paketti_paste 
+}
+
+renoise.tool():add_menu_entry { 
+    name = "Pattern Editor:" .. APP_NAME .. ":Paketti Mix-Paste", 
+    invoke = paketti_mix_paste 
+}
+
 --------------------------------------------------------------------------------
 -- Keybindings
 --------------------------------------------------------------------------------
@@ -1164,6 +1412,26 @@ renoise.tool():add_keybinding {
 renoise.tool():add_keybinding { 
     name = "Pattern Editor:" .. APP_NAME .. ":Mix-Paste (Empty Cells Only)", 
     invoke = mix_paste_from_buffer 
+}
+
+renoise.tool():add_keybinding { 
+    name = "Pattern Editor:" .. APP_NAME .. ":Paketti Copy", 
+    invoke = paketti_copy 
+}
+
+renoise.tool():add_keybinding { 
+    name = "Pattern Editor:" .. APP_NAME .. ":Paketti Cut", 
+    invoke = paketti_cut 
+}
+
+renoise.tool():add_keybinding { 
+    name = "Pattern Editor:" .. APP_NAME .. ":Paketti Paste", 
+    invoke = paketti_paste 
+}
+
+renoise.tool():add_keybinding { 
+    name = "Pattern Editor:" .. APP_NAME .. ":Paketti Mix-Paste", 
+    invoke = paketti_mix_paste 
 }
 
 --------------------------------------------------------------------------------
@@ -1214,8 +1482,45 @@ renoise.tool():add_midi_mapping {
     end
 }
 
+renoise.tool():add_midi_mapping {
+    name = APP_NAME .. ":Paketti Copy",
+    invoke = function(message)
+        if message:is_trigger() then
+            paketti_copy()
+        end
+    end
+}
+
+renoise.tool():add_midi_mapping {
+    name = APP_NAME .. ":Paketti Cut",
+    invoke = function(message)
+        if message:is_trigger() then
+            paketti_cut()
+        end
+    end
+}
+
+renoise.tool():add_midi_mapping {
+    name = APP_NAME .. ":Paketti Paste",
+    invoke = function(message)
+        if message:is_trigger() then
+            paketti_paste()
+        end
+    end
+}
+
+renoise.tool():add_midi_mapping {
+    name = APP_NAME .. ":Paketti Mix-Paste",
+    invoke = function(message)
+        if message:is_trigger() then
+            paketti_mix_paste()
+        end
+    end
+}
+
 --------------------------------------------------------------------------------
 -- Startup
 --------------------------------------------------------------------------------
 log(APP_NAME .. " v" .. APP_VERSION .. " loaded successfully")
 log("Features: Full note columns, multi-track, mix-paste, file I/O, MIDI mappings")
+log("Paketti Clipboard: Copy/Cut/Paste using persistent clipboard file at: " .. PAKETTI_CLIPBOARD_FILE)
